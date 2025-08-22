@@ -1,6 +1,7 @@
 #include "expression_parser.h"
 #include<typeindex>
 #include<queue>
+#include<cmath>
 #include<iostream>
 using std::regex_match, std::queue, std::cout;
 
@@ -56,25 +57,19 @@ Expr parse_expression(string expression) {
     string temp {};
     Expr obj;
     bool decimal {false};
-
-    cout << "Starting expression parsing" << '\n';
     for (char& i: expression) {
+        int level {};
         if (isNotOperator(i)){
-            cout << "Character detected not as an operator: " << i << '\n';
             if (i == '.') {
                 decimal = true;
-                cout << "Decimal was set to true" << '\n';
             }
             temp += i;
         } else {
             // check if the expression is empty
             // i.e. we are at the first operator
-            cout << "Character detected as an operator: " << i << '\n';
-            cout << "Current temp: " << temp << '\n';
             if (obj.root == nullptr) {
                 // create a new opnode and add the 
                 // term to the left of the opnode
-                cout << "Root obj detected as nullptr. Successfully detected root" << '\n';
 
                 obj.root = new TreeNode(new OpNode(i));
                 if (decimal) {
@@ -85,7 +80,6 @@ Expr parse_expression(string expression) {
                 obj.maxLevel++;
             } else { // expression is not empty
                 // check if the decimal flag was enabled
-                cout << "Detected not a root object\n";
                 if (decimal) {
                     throw ValueNotSupportedException(("Decimal value " + temp + " is not supported yet.").c_str());
                 }
@@ -97,52 +91,40 @@ Expr parse_expression(string expression) {
                 // insert the new node to
                 TreeNode* ptr = obj.root;
                 // Repeatedly go to the right nodes until a nullptr/DataNode is reached
-                cout << "Traversing to the required node\n";
-                // cout << typeid(*(ptr->obj)).name() << '\n';
-                // cout << (leftOpIsHigher(ptr->obj->getData(), i) == false) << '\n';
-                // cout << (typeid(*(ptr->obj)) == typeid(OpNode)) << '\n';
-                // cout << (ptr->right != nullptr) << '\n';
                 while (typeid(*(ptr->obj)) == typeid(OpNode) 
                 && leftOpIsHigher(ptr->obj->getData(), i) == false
                 && ptr->right != nullptr) {
                     // go to the right node
                     ptr = ptr->right;
+                    level++;
                 }
-
-                cout << "Currently ptr at " << ptr->obj->getData() << '\n';
 
                 // check if the current node op is higher than the new op
                 if (leftOpIsHigher(ptr->obj->getData(), i)) {
-                    cout << "Detected that left op is higher. Left op is " << obj.root->obj->getData() << '\n';
                     // insert operand to the right of the operator
                     if (ptr == obj.root) {
-                        cout << "ptr at root as well" << '\n';
                         ptr->right = dataNode;
                         opnode->left = ptr;
-                        cout << "interchanging root" << '\n';
                         obj.root = opnode;
                         obj.maxLevel++;
                     } else {
-                        cout << "ptr not at root\n";
                         ptr->right = dataNode;
                         opnode->left = ptr;
                         obj.maxLevel++;
                     }
                 } else {
-                    cout << "Detected right op is higher. Left op is " << obj.root->obj->getData() << '\n';
                     if (ptr->right == nullptr) {
-                        cout << "Found right pointer is nullptr\n";
+                        cout<< "Found right pointer is nullptr\n";
                         // check if the right node is empty (ideally should be)
                         ptr->right = opnode;
                         opnode->left = dataNode;
-                        obj.maxLevel++;
+                        obj.maxLevel = level > obj.maxLevel ? level + 1 : obj.maxLevel + 1;
                     } else {
                         // this cannot happen and is impossible
                         throw ExpressionParseException(("A value already exists in the tree."));
                     }
                 }
             }
-            cout << "Resetting temp and decimal flag\n";
             temp = "";
             decimal = false;
         }
@@ -150,7 +132,8 @@ Expr parse_expression(string expression) {
 
     // Insert remaining element (if any)
     if (temp.size() > 0) {
-        cout << "Inserting last element: " << temp << '\n';
+        int level {};
+        // cout<< "Inserting last element: " << temp << '\n';
         TreeNode* ptr = obj.root;
         // find the right most OpNode with a right node as nullptr
         while (ptr->right != nullptr) {
@@ -158,11 +141,45 @@ Expr parse_expression(string expression) {
         }
         TreeNode* dataNode = new TreeNode(new DataNode(std::stoi(temp)));
         ptr->right = dataNode;
-        cout << "Success\n";
+        // cout<< "Success\n";
     }
-    cout << "exited parsing loop\n";
+    obj.maxLevel = obj.rescanMaxLevel();
+    // cout<< "exited parsing loop\n";
 
     return obj;
+}
+
+int Expr::rescanMaxLevel() {
+    TreeNode* ptr {this->root};
+    queue<TreeNode*> q;
+    int level {};
+
+    do {
+        if (q.size() == 0) {
+            if (ptr->left != nullptr)
+                q.push(ptr->left);
+            if (ptr->right != nullptr) 
+                q.push(ptr->right);
+            level++;
+        } else {
+            int queueSize = static_cast<int>(q.size());
+            while (queueSize > 0) {
+                // get the front of the queue
+                ptr = q.front();
+                q.pop();
+                // add its left and right nodes to the queue
+                if (ptr->left != nullptr)
+                    q.push(ptr->left);
+                if (ptr->right != nullptr) 
+                    q.push(ptr->right);
+                // pop handled above and decrement queueSize
+                queueSize--;
+                // add internode gaps
+            }
+            level++;
+        }
+    } while(q.size() > 0);
+    return level;
 }
 
 void Expr::show() {
@@ -170,48 +187,39 @@ void Expr::show() {
     queue<TreeNode*> q;
     TreeNode* ptr {this->root};
     int maxLevel = this->maxLevel;
-    int maxGaps = 2 * (maxLevel - 1);
+    int maxGaps = static_cast<int>(std::pow(2, maxLevel - 1)) - 1;
+    int lineNum = maxLevel - 2;
+    string interNodeGaps = "", preGaps = "";
 
-    cout << "\n=================\n";
-    cout << "Show the tree\n";
-    cout << "=================\n";
+    cout<< "\n=================\n";
+    cout<< "Show the tree\n";
+    cout<< "=================\n";
     do {
         // first insert the required spaces before the ops/data nodes in the level
-        // cout << "Currently tree:-\n" << tree << '\n';
-        // cout << "Adding spaces\n";
         for(int i = 0; i < maxGaps; i++) {
-            tree += ' ';
+            preGaps += ' ';
         }
 
+        // add pre-node gaps to the line first
+        tree += preGaps;
 
         // see if the queue is empty. 
         if (q.size() <= 0) {
-            // cout << "Queue size is empty\n";
             // this is the root node. 
             // add the data in the root node and add the left and right nodes in the queue
             if (ptr->left == nullptr && ptr->right == nullptr) {
-                // cout << "========\nFound DataNode\n========\n";
-                // cout << "Pushing type(" << typeid(dynamic_cast<DataNode*>(ptr->obj)->getData()).name() << ") and value (" << std::to_string(dynamic_cast<DataNode*>(ptr->obj)->getData()) << ") to the tree\n";
                 tree += std::to_string(dynamic_cast<DataNode*>(ptr->obj)->getData());
             } else {
-                // cout << "========\nFound OpNode\n========\n";
-                // cout << "Pushing type(" << typeid(ptr->obj->getData()).name() << ") and value (" << ptr->obj->getData() << ") to the tree\n";
                 tree += ptr->obj->getData();
             }
-            // cout << "Added root object to tree\n";
             // this is to check if the user has not just provided a single number
             // if yes then the loop won't move forward
-            if (ptr->left != nullptr)
-                q.push(ptr->left);
-            if (ptr->right != nullptr) 
-                q.push(ptr->right);
-            // cout << "Pushed left and right nodes to the queue\n";
+            q.push(ptr->left);
+            q.push(ptr->right);
         } else { // not empty means that we are in the middle of the tree
-            // cout << "Queue size is not empty\n";
             int queueSize = static_cast<int>(q.size());
             // we iterate over the queue to get the values of the current level
             // while adding the nodes for the next level
-            // cout << "Traversing queue\n";
             while (queueSize > 0) {
                 // get the front of the queue
                 ptr = q.front();
@@ -224,40 +232,25 @@ void Expr::show() {
                 }
                 // add the element to the tree
                 if (ptr->left == nullptr && ptr->right == nullptr) {
-                    // cout << "========\nFound DataNode\n========\n";
-                    // cout << "Pushing type(" << typeid(dynamic_cast<DataNode*>(ptr->obj)->getData()).name() << ") and value (" << std::to_string(dynamic_cast<DataNode*>(ptr->obj)->getData()) << ") to the tree\n";
                     tree += std::to_string(dynamic_cast<DataNode*>(ptr->obj)->getData());
-                    tree += " ";
                 } else {
-                    // cout << "========\nFound OpNode\n========\n";
-                    // cout << "Pushing type(" << typeid(ptr->obj->getData()).name() << ") and value (" << ptr->obj->getData() << ") to the tree\n";
                     tree += ptr->obj->getData();
-                    tree += " ";
                 }
                 // add its left and right nodes to the queue
-                if (ptr->left != nullptr)
-                    q.push(ptr->left);
-                if (ptr->right != nullptr) 
-                    q.push(ptr->right);
+                q.push(ptr->left);
+                q.push(ptr->right);
                 // pop handled above and decrement queueSize
                 queueSize--;
+                // add internode gaps
+                tree += interNodeGaps;
             }
-            // cout << "Ended queue traversal\n";
         }
-        // cout << "==========\nCurrently in the queue\n==========\n[ ";
-        // queue<TreeNode*> copy_q = q;
-        // while (!copy_q.empty()) {
-        //     // check if the element is a DataNode or a OpNode
-        //     if (copy_q.front()->left == nullptr && copy_q.front()->right == nullptr) {
-        //         cout << dynamic_cast<DataNode*>(copy_q.front()->obj)->getData() << ' ';
-        //     } else {
-        //         cout << copy_q.front()->obj->getData() << ' ';
-        //     }
-        //     copy_q.pop();
-        // }
-        // cout << "]\n==========\n\n";
         tree += '\n';
-        maxGaps--;
+        interNodeGaps = preGaps;
+        preGaps = "";
+        maxGaps -= static_cast<int>(std::pow(2, lineNum));
+        lineNum--;
+
     } while(q.size() > 0);
-    cout << tree << '\n';
+    cout<< tree << '\n';
 }

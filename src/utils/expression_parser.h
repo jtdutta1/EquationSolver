@@ -47,6 +47,7 @@ struct Expr{
     Expr(): root (nullptr), maxLevel (0) {}
 
     void show();
+    int rescanMaxLevel();
 };
 
 bool match_expression(string expression);
