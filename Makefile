@@ -26,5 +26,5 @@ libsolveexpression.o:
 clean:
 	rm -rf a.out solve libsolve*.o libsolve*.so utils.o
 
-run:
-	LD_LIBRARY_PATH=. ./solve \(2+2\)1+3
+run: solve
+	LD_LIBRARY_PATH=. ./solve 9/3+2+5/5
